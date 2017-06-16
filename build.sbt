@@ -27,10 +27,10 @@ libraryDependencies += "org.apache.hbase" % "hbase-server" % "1.2.4"  % "provide
 lazy val spark_version = "2.1.0"
 lazy val spark_lib = Seq(
     "org.apache.spark" %% "spark-core" % spark_version % "provided",
-    "org.apache.spark" %% "spark-sql-kafka-0-10" % spark_version % "provided",
+    "org.apache.spark" %% "spark-sql-kafka-0-10" % spark_version,
     "org.apache.spark" %% "spark-sql" % spark_version % "provided",
     "org.apache.spark" %% "spark-streaming" % spark_version % "provided",
-    "org.apache.spark" % "spark-streaming-kafka-0-10_2.11" % spark_version % "provided"
+    "org.apache.spark" % "spark-streaming-kafka-0-10_2.11" % spark_version
 )
 
 libraryDependencies ++= spark_lib
@@ -38,3 +38,10 @@ libraryDependencies ++= spark_lib
 test in assembly := {}
 assemblyJarName in assembly := "yn-streaming.jar"
 run in Compile <<= Defaults.runTask(fullClasspath in Compile, mainClass in (Compile, run), runner in (Compile, run))
+assemblyExcludedJars in assembly := {
+    val cp = (fullClasspath in assembly).value
+    cp filter { el =>
+        (el.data.getName == "unused-1.0.0.jar") ||
+        (el.data.getName == "spark-tags_2.11-2.1.0.jar")
+    }
+}
