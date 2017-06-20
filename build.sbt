@@ -49,8 +49,7 @@ assemblyExcludedJars in assembly := {
     }
 }
 
-
 lazy val mainRunner = project.in(file("mainRunner")).dependsOn(RootProject(file("."))).settings(
     scalaVersion := "2.11.8",
     libraryDependencies ++= spark_lib.map(_ % "compile")
-)
+).disablePlugins(sbtassembly.AssemblyPlugin)
