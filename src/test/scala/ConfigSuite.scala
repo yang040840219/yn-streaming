@@ -10,12 +10,12 @@ class ConfigSuite  extends FunSuite with Matchers with BeforeAndAfter {
 
    test("config") {
 
-      println(conf.getString("consumer.bootstrap_servers"))
+      println(conf.getString("beeper_trans_event.consumer.bootstrap_servers"))
 
    }
 
   test("exists path"){
-    println(conf.hasPath("spark_streaming.spark_master"))
+    println(conf.hasPath("beeper_trans_event.streaming.spark_master"))
   }
 
 }

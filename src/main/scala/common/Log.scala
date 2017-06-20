@@ -7,5 +7,5 @@ import org.apache.log4j.{Level, LogManager}
   */
 trait Log {
   @transient val log = LogManager.getRootLogger
-  log.setLevel(Level.INFO)
+  log.setLevel(Level.ERROR)
 }

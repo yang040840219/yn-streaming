@@ -1,4 +1,4 @@
-package kafka
+package kafka.trans_event
 
 import _root_.common.JsonUtil
 import org.apache.commons.lang3.StringUtils

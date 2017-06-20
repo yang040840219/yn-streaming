@@ -1,6 +1,7 @@
 package common
 
 import com.typesafe.config.ConfigFactory
+import kafka.{AbstractConfEnv, EnvState, ConfEnv}
 import redis.clients.jedis.{Jedis, JedisSentinelPool, HostAndPort}
 import scala.collection.JavaConverters._
 
@@ -8,11 +9,9 @@ import scala.collection.JavaConverters._
 /**
   * Created by yxl on 17/4/15.
   */
-object RedisUtil extends Log {
+object RedisUtil extends Log with AbstractConfEnv {
 
-  val conf = ConfigFactory.load("config_dev.conf")
-  val sentinelMasterName = conf.getString("redis.sentinel_master")
-
+    val sentinelMasterName = conf.getString("redis.sentinel_master")
 
   def getPool(): JedisSentinelPool = {
     val sentinels = conf.getString("redis.sentinel_host").split(",").map(
