@@ -138,13 +138,6 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
 
             val countDriverDataFrame = spark.sql(sql)
 
-
-            val table = "bi_stream_trans_event_ten_minute"
-            val url = conf.getString("mysql.url")
-            val userName = conf.getString("mysql.userName")
-            val password = conf.getString("mysql.password")
-
-
             // 1 hour
             lines.foreachPartition(partition => {
                 val pool = RedisUtil.getPool()
@@ -152,14 +145,15 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
                 partition.foreach(eventMessage => {
                     val dateTime = DateUtil.dateStr2DateTime(eventMessage.timestamp)
                     val dateTimeHour = dateTime.getHour
+                    val adcId = eventMessage.adcId
                     val status = eventMessage.status
                     val driverId = eventMessage.driverId
                     // 2017-04-14_10@sign_driver ,  2017-04-14_10@run_driver , 2017-04-14_10@complete_driver  expire 1 day
                     val key = status match {
-                        case "400" => dateTimeHour + "@sign_driver"
-                        case "800" => dateTimeHour + "@run_driver"
-                        case "900" => dateTimeHour + "@complete_driver"
-                        case _ => if (Seq("450", "500", "600", "950").contains(status)) dateTimeHour + "@exception_driver" else null
+                        case "400" => dateTimeHour + "@" + adcId + "@sign_driver"
+                        case "800" => dateTimeHour + "@" + adcId + "@run_driver"
+                        case "900" => dateTimeHour + "@" + adcId + "@complete_driver"
+                        case _ => if (Seq("450", "500", "600", "950").contains(status)) dateTimeHour + "@" + adcId + "@exception_driver" else null
                     }
                     if (StringUtils.isNotEmpty(key)) {
                         redisConnection.sadd(key, driverId)
@@ -167,7 +161,7 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
                     }
 
                     if ("900".equals(status)) {
-                        val eventPriceKey = dateTimeHour + "@event_price"
+                        val eventPriceKey = dateTimeHour + "@" + adcId + "@event_price"
                         val eventPrice = eventMessage.eventPrice.toInt
                         redisConnection.incrBy(eventPriceKey, eventPrice)
                         redisConnection.expire(eventPriceKey, 3600 * 24)
@@ -177,19 +171,23 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
                 RedisUtil.close(pool)
             })
 
-
+            val table = "bi_stream_trans_event_ten_minute"
+            val url = conf.getString("mysql.url")
+            val userName = conf.getString("mysql.userName")
+            val password = conf.getString("mysql.password")
 //            val properties = new Properties()
 //            properties.put("user", userName)
 //            properties.put("password", password)
 //            properties.put("driver", "com.mysql.jdbc.Driver")
 //            countDriverDataFrame.write.mode(SaveMode.Append).jdbc(url, table, properties)
             val connection = DBUtil.createMySQLConnectionFactory(url, userName, password)
-            val removeSql = s"delete from $table where run_time = ?"
+            val removeSql = s"delete from $table where run_time = ? and adc_id = ?"
             countDriverDataFrame.collect().foreach(row => {
                 val valueMap = row.getValuesMap(countDriverDataFrame.schema.map(_.name))
                 val runTime = valueMap.getOrElse("run_time","")
+                val adcId = valueMap.getOrElse("adc_id","0").toInt
                 val runTimeStamp = DateTime(runTime, DateTime.DATETIMEMINUTE).getDate
-                DBUtil.runSQL(connection, removeSql, Seq(runTimeStamp))
+                DBUtil.runSQL(connection, removeSql, Seq(runTimeStamp,adcId))
                 DBUtil.map2table(connection, valueMap, table)
             })
 
@@ -200,21 +198,25 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
             lines.map(eventMessage => {
                 val dateTime = DateUtil.dateStr2DateTime(eventMessage.timestamp)
                 val dateTimeHour = dateTime.getHour
-                dateTimeHour
+                val adcId = eventMessage.adcId
+                dateTimeHour + "@" + adcId
             }).distinct()
             .collect()
-            .foreach(timeHour => {
-                val signDriverKey = timeHour + "@sign_driver"
-                val runDriverKey = timeHour + "@run_driver"
-                val completeDriverKey = timeHour + "@complete_driver"
-                val exceptionDriverKey = timeHour + "@exception_driver"
-                val eventPriceKey = timeHour + "@event_price"
+            .foreach(key => {
+                val signDriverKey = key + "@sign_driver"
+                val runDriverKey = key + "@run_driver"
+                val completeDriverKey = key + "@complete_driver"
+                val exceptionDriverKey = key + "@exception_driver"
+                val eventPriceKey = key + "@event_price"
                 val signDriverCount = redisConnection.scard(signDriverKey)
                 val runDriverCount = redisConnection.scard(runDriverKey)
                 val completeDriverCount = redisConnection.scard(completeDriverKey)
                 val exceptionDriverCount = redisConnection.scard(exceptionDriverKey)
                 val eventPrice = redisConnection.get(eventPriceKey)
 
+                val keyArray = key.split("@")
+                val timeHour = keyArray.apply(0)
+                val adcId = keyArray.apply(1).toInt
                 val columnMap = Map("run_time" -> DateTime(timeHour, DateTime.DATETIMEHOUR).getDate,
                     "sign_driver" -> signDriverCount,
                     "run_driver" -> runDriverCount,
@@ -224,8 +226,8 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
                     "created_at" -> DateUtil.getCurrent,
                     "updated_at" -> DateUtil.getCurrent).toMap
 
-                val deleteSQL = "delete from bi_stream_trans_event_one_hour where run_time = ?"
-                DBUtil.runSQL(connection, deleteSQL, Seq(DateTime(timeHour, DateTime.DATETIMEHOUR).getDate))
+                val deleteSQL = "delete from bi_stream_trans_event_one_hour where run_time = ? and adc_id = ?"
+                DBUtil.runSQL(connection, deleteSQL, Seq(DateTime(timeHour, DateTime.DATETIMEHOUR).getDate,adcId))
                 DBUtil.map2table(connection, columnMap, "bi_stream_trans_event_one_hour")
 
                 log.info(s"时间:$timeHour 注册司机:$signDriverCount 在跑司机:$runDriverCount 完成司机:$completeDriverCount  " +
