@@ -153,6 +153,7 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
             val properties = new Properties()
             properties.put("user", userName)
             properties.put("password", password)
+            properties.put("driver", "com.mysql.jdbc.Driver")
             countDriverDataFrame.write.mode(SaveMode.Append).jdbc(url, table, properties)
 
             // 1 hour
