@@ -227,11 +227,11 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
                 val deleteSQL = "delete from bi_stream_trans_event_one_hour where run_time = ?"
                 DBUtil.runSQL(connection, deleteSQL, Seq(DateTime(timeHour, DateTime.DATETIMEHOUR).getDate))
                 DBUtil.map2table(connection, columnMap, "bi_stream_trans_event_one_hour")
-                connection.close()
 
                 log.info(s"时间:$timeHour 注册司机:$signDriverCount 在跑司机:$runDriverCount 完成司机:$completeDriverCount  " +
                 s"异常司机:$exceptionDriverCount 基础运力费:$eventPrice")
             })
+            connection.close()
             redisConnection.close()
             RedisUtil.close(pool)
 
