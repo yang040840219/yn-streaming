@@ -218,6 +218,7 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
                 val timeHour = keyArray.apply(0)
                 val adcId = keyArray.apply(1).toInt
                 val columnMap = Map("run_time" -> DateTime(timeHour, DateTime.DATETIMEHOUR).getDate,
+                    "adc_id" -> adcId,
                     "sign_driver" -> signDriverCount,
                     "run_driver" -> runDriverCount,
                     "complete_driver" -> completeDriverCount,
