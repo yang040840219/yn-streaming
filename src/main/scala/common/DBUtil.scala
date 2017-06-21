@@ -10,7 +10,7 @@ import scala.collection.JavaConverters._
 /**
   * Created by yxl on 17/4/12.
   */
-object DBUtil extends Serializable {
+object DBUtil extends Serializable with Log {
 
     def createMySQLConnectionFactory(url: String, properties: Properties): Connection = {
         val userSpecifiedDriverClass = Option(properties.getProperty("driver"))
@@ -89,6 +89,7 @@ object DBUtil extends Serializable {
             }
         }
         )
+        log.info(s"运行 SQL:$sql 参数: ${param.mkString(",")}")
         statement.executeUpdate()
     }
 

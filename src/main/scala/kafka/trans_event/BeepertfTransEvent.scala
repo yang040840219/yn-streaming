@@ -9,7 +9,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{SparkSession, SaveMode}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.kafka010.ConsumerStrategies.Subscribe
 import org.apache.spark.streaming.kafka010.LocationStrategies.PreferConsistent
@@ -138,15 +138,12 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
 
             val countDriverDataFrame = spark.sql(sql)
 
+
             val table = "bi_stream_trans_event_ten_minute"
             val url = conf.getString("mysql.url")
             val userName = conf.getString("mysql.userName")
             val password = conf.getString("mysql.password")
-            val properties = new Properties()
-            properties.put("user", userName)
-            properties.put("password", password)
-            properties.put("driver", "com.mysql.jdbc.Driver")
-            countDriverDataFrame.write.mode(SaveMode.Append).jdbc(url, table, properties)
+
 
             // 1 hour
             lines.foreachPartition(partition => {
@@ -180,10 +177,26 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
                 RedisUtil.close(pool)
             })
 
+
+//            val properties = new Properties()
+//            properties.put("user", userName)
+//            properties.put("password", password)
+//            properties.put("driver", "com.mysql.jdbc.Driver")
+//            countDriverDataFrame.write.mode(SaveMode.Append).jdbc(url, table, properties)
+            val connection = DBUtil.createMySQLConnectionFactory(url, userName, password)
+            val removeSql = s"delete from $table where run_time = ?"
+            countDriverDataFrame.collect().foreach(row => {
+                val valueMap = row.getValuesMap(countDriverDataFrame.schema.map(_.name))
+                val runTime = valueMap.getOrElse("run_time","")
+                val runTimeStamp = DateTime(runTime, DateTime.DATETIMEMINUTE).getDate
+                DBUtil.runSQL(connection, removeSql, Seq(runTimeStamp))
+                DBUtil.map2table(connection, valueMap, table)
+            })
+
+
             // 读取数据
             val pool = RedisUtil.getPool()
             val redisConnection = pool.getResource
-            val connection = DBUtil.createMySQLConnectionFactory(url, userName, password)
             lines.map(eventMessage => {
                 val dateTime = DateUtil.dateStr2DateTime(eventMessage.timestamp)
                 val dateTimeHour = dateTime.getHour

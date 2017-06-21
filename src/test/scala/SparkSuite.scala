@@ -1,7 +1,8 @@
 import java.util.Properties
 
-import common.DateUtil
-import kafka.{AbstractConfEnv, SparkSessionSingleton}
+import common.{DateTime, DBUtil, DateUtil}
+import kafka.trans_event.BeepertfTransEvent._
+import kafka.{BeeperTransEventDevelopEnvState, EnvState, AbstractConfEnv, SparkSessionSingleton}
 import kafka.trans_event.BeepertfMessage
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.{SparkContext, SparkConf}
@@ -12,6 +13,13 @@ import org.scalatest.{BeforeAndAfter, Matchers, FunSuite}
   */
 class SparkSuite extends FunSuite with Matchers with BeforeAndAfter with AbstractConfEnv {
 
+
+    /**
+      * 用来设置读取配置文件
+      *
+      * @return
+      */
+    override def getEnv: EnvState = BeeperTransEventDevelopEnvState
 
     val message =
         """
@@ -39,6 +47,7 @@ class SparkSuite extends FunSuite with Matchers with BeforeAndAfter with Abstrac
         }).toDF()
 
         df.printSchema()
+        println(df.count())
 
         df.createOrReplaceTempView("view_event_data")
 
@@ -60,14 +69,30 @@ class SparkSuite extends FunSuite with Matchers with BeforeAndAfter with Abstrac
 
         val countDriverDataFrame = sparkSession.sql(sql)
 
-        val url = conf.getString("mysql.url")
+//        val url = conf.getString("mysql.url")
+//        val table = "bi_stream_trans_event_ten_minute"
+//        val userName = conf.getString("mysql.userName")
+//        val password = conf.getString("mysql.password")
+//        val properties = new Properties()
+//        properties.put("user",userName)
+//        properties.put("password",password)
+//        countDriverDataFrame.write.mode(SaveMode.Append).jdbc(url,table,properties)
+
         val table = "bi_stream_trans_event_ten_minute"
+        val url = conf.getString("mysql.url")
         val userName = conf.getString("mysql.userName")
         val password = conf.getString("mysql.password")
-        val properties = new Properties()
-        properties.put("user",userName)
-        properties.put("password",password)
-        countDriverDataFrame.write.mode(SaveMode.Append).jdbc(url,table,properties)
+
+        val connection = DBUtil.createMySQLConnectionFactory(url, userName, password)
+        val removeSql = s"delete from $table where run_time = ?"
+
+        countDriverDataFrame.collect().foreach(row => {
+            val valueMap = row.getValuesMap(countDriverDataFrame.schema.map(_.name))
+            val runTime = valueMap.getOrElse("run_time","")
+            val runTimeStamp = DateTime(runTime, DateTime.DATETIMEMINUTE).getDate
+            DBUtil.runSQL(connection, removeSql, Seq(runTimeStamp))
+            DBUtil.map2table(connection, valueMap, table)
+        })
     }
 
 }
