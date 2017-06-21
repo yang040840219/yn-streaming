@@ -75,7 +75,7 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
             .getOrElse(Map[TopicPartition, Long]())
         }
 
-        log.info(s"kafka OffsetMap:$offsetMap")
+        log.info(s"kafka offset 起始位置 OffsetMap:$offsetMap")
 
         val stream = KafkaUtils.createDirectStream[String, String](
             ssc,
@@ -223,7 +223,7 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
                 DBUtil.map2table(connection, columnMap, "bi_stream_trans_event_one_hour")
                 connection.close()
 
-                log.error(s"时间:$timeHour 注册司机:$signDriverCount 在跑司机:$runDriverCount 完成司机:$completeDriverCount  " +
+                log.info(s"时间:$timeHour 注册司机:$signDriverCount 在跑司机:$runDriverCount 完成司机:$completeDriverCount  " +
                 s"异常司机:$exceptionDriverCount 基础运力费:$eventPrice")
             })
             redisConnection.close()
@@ -231,7 +231,7 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
 
             val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
             offsetRanges.foreach(offsetRange => {
-                log.error(s"zookeeper offset: topic:${offsetRange.topic} partition:${offsetRange.partition} " +
+                log.info(s"zookeeper offset: topic:${offsetRange.topic} partition:${offsetRange.partition} " +
                 s"fromOffset:${offsetRange.fromOffset} endOffset:${offsetRange.untilOffset}")
             })
 
