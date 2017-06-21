@@ -36,5 +36,5 @@ trait AbstractConfEnv extends ConfEnv {
       * 用来设置读取配置文件
       * @return
       */
-    override def getEnv: EnvState = BeeperTransEventDevelopEnvState
+    override def getEnv: EnvState = BeeperTransEventProductEnvState
 }
