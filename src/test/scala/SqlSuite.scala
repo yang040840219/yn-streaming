@@ -47,7 +47,7 @@ class SqlSuite extends FunSuite with Matchers with BeforeAndAfter with AbstractC
 
       println(columnMap)
 
-      DBUtil.map2table(offsetSQLConnection,columnMap,"bi_stream_trans_event_one_hour")
+      DBUtil.insertTable(offsetSQLConnection,columnMap,"bi_stream_trans_event_one_hour")
 
   }
 

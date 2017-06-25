@@ -71,9 +71,37 @@ object DateUtil {
         (math.floor(mills.toDouble / period) + 1).toLong * period
     }
 
+    def before(mills: Long, period: Long) = {
+        (math.floor(mills.toDouble / period)).toLong * period
+    }
+
+    /**
+      * 取周期时间下届
+      * @param mills
+      * @return
+      */
     def getNextTenMinute(mills: Long): String = {
         try {
             val nextMills = next(mills, PERIOD_TEN)
+            val calendar = Calendar.getInstance()
+            calendar.setTimeInMillis(nextMills)
+            val sdf = new SimpleDateFormat(MINUTE_FORMAT)
+            sdf.format(calendar.getTime())
+        } catch {
+            case ex: Exception => {
+                null
+            }
+        }
+    }
+
+    /**
+      * 取周期时间上界
+      * @param mills
+      * @return
+      */
+    def getBeforeTenMinute(mills: Long): String = {
+        try {
+            val nextMills = before(mills, PERIOD_TEN)
             val calendar = Calendar.getInstance()
             calendar.setTimeInMillis(nextMills)
             val sdf = new SimpleDateFormat(MINUTE_FORMAT)

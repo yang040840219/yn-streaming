@@ -1,8 +1,11 @@
 import java.io.File
+import java.util.concurrent.TimeUnit
 import java.util.{Calendar, Date}
 
 import common.{DateTime, DateUtil}
 import org.scalatest.{BeforeAndAfter, Matchers, FunSuite}
+
+import scala.util.Random
 
 /**
   * Created by yxl on 17/4/14.
@@ -17,7 +20,7 @@ class TimeSuite extends FunSuite with Matchers with BeforeAndAfter{
 
      val period = 600 * 1000
 
-    val next = (math.floor(clock.getTime().toDouble / period) + 1).toLong * period
+    val next = (math.floor(clock.getTime().toDouble / period)).toLong * period
 
     val calendar = Calendar.getInstance()
     calendar.setTimeInMillis(next)
@@ -26,17 +29,24 @@ class TimeSuite extends FunSuite with Matchers with BeforeAndAfter{
   }
 
   test("dateutil ten minute"){
-    val clock = new Date()
-     val next = DateUtil.getNextTenMinute(clock.getTime)
-     println(next)
+      val calendar = Calendar.getInstance()
+    (1 to 20000).foreach(x => {
+        val r =
+        calendar.set(Calendar.MINUTE, Random.nextInt(x % 60))
+        TimeUnit.SECONDS.sleep(1)
+        val clock = calendar.getTime
+        val next = DateUtil.getNextTenMinute(clock.getTime)
+        println(clock + "   " + next)
+    })
+
   }
 
   test("str 2 mills"){
-     val str = "2017-04-14 12:01:39"
+     val str = "2017-04-14 23:59:59"
      val mills = DateUtil.str2mills(str)
-     val minute = DateUtil.getNextTenMinute(mills)
+     val minute = DateUtil.getBeforeTenMinute(mills)
      val dateTime = DateUtil.dateStr2DateTime(minute)
-     println(dateTime.getDay)
+     println(dateTime.getMinute)
   }
 
   test("file") {

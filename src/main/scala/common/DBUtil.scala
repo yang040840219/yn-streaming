@@ -40,7 +40,7 @@ object DBUtil extends Serializable with Log {
     }
 
 
-    def map2table(connection: Connection, map: Map[String, Any], tableName: String): Int = {
+    def insertTable(connection: Connection, map: Map[String, Any], tableName: String): Int = {
         val columns = map.filter( x => x.productElement(1) != null).keys.toSeq
         val values = columns.map(column => "?")
         val sqlBuffer = new StringBuffer()
@@ -92,6 +92,25 @@ object DBUtil extends Serializable with Log {
         log.info(s"运行 SQL:$sql 参数: ${param.mkString(",")}")
         statement.executeUpdate()
     }
+
+
+    def runQuerySQLCount(connection: Connection, sql: String, param : Seq[Any]): Int = {
+        val statement = connection.prepareStatement(sql)
+        param.zip(Stream.from(1)).map(item => {
+            item match {
+                case (column: Any , index: Int) => {
+                    setStatementParam(statement, index,column)
+                }
+                case _ => throw new Exception(s"列名格式 $param")
+            }
+        }
+        )
+        log.info(s"运行 SQL:$sql 参数: ${param.mkString(",")}")
+        val resultSet = statement.executeQuery()
+        resultSet.last()
+        resultSet.getRow()
+    }
+
 
     def resultSet2Seq(resultSet: ResultSet): Option[Seq[Map[String, AnyRef]]] = {
         val md = resultSet.getMetaData

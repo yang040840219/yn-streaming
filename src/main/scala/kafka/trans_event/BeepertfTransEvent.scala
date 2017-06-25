@@ -1,7 +1,6 @@
 package kafka.trans_event
 
 import java.io.File
-import java.util.Properties
 
 import _root_.common._
 import kafka._
@@ -9,6 +8,8 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.{SparkSession, SaveMode}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.kafka010.ConsumerStrategies.Subscribe
@@ -109,34 +110,45 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
             .map(line => line.get)
             .filter(line => "UPDATE".equals(line.eventType))
             .map(line => {
-                line.copy(timestamp = DateUtil.getNextTenMinute(DateUtil.str2mills(line.timestamp)))
+                line.copy(timestamp = DateUtil.getBeforeTenMinute(DateUtil.str2mills(line.timestamp)))
             })
             .filter(line => "0".equals(line.isDel))
-            .coalesce(5)
+            .coalesce(3)
 
             val spark = SparkSessionSingleton.getInstance(rdd.sparkContext.getConf)
             import spark.implicits._
 
             val eventDataFrame = lines.toDF()
-            eventDataFrame.createOrReplaceTempView("view_event_data")
 
-            // 10min 签到司机,在跑司机,配送完成司机,异常司机,基础运力价格
-            val sql =
-                """
-                  | select
-                  |   adcId as adc_id,
-                  |   timestamp as run_time,
-                  |   count(distinct(if(status='400',driverId,null))) as sign_driver,
-                  |   count(distinct(if(status='800',driverId,null))) as run_driver,
-                  |   count(distinct(if(status='900',driverId,null))) as complete_driver,
-                  |   count(distinct(if(status in ('450','500','600','950'),driverId,null))) as exception_driver,
-                  |   sum(if(status = '900',eventPrice,0)) as event_price,
-                  |   current_timestamp as created_at,
-                  |   current_timestamp as updated_at
-                  |   from view_event_data where isDel = '0' group by adcId,timestamp
-                """.stripMargin
 
-            val countDriverDataFrame = spark.sql(sql)
+//            eventDataFrame.createOrReplaceTempView("view_event_data")
+//            // 10min 签到司机,在跑司机,配送完成司机,异常司机,基础运力价格
+//            val sql =
+//                """
+//                  | select
+//                  |   adcId as adc_id,
+//                  |   timestamp as run_time,
+//                  |   count(distinct(if(status='400',driverId,null))) as sign_driver,
+//                  |   count(distinct(if(status='800',driverId,null))) as run_driver,
+//                  |   count(distinct(if(status='900',driverId,null))) as complete_driver,
+//                  |   count(distinct(if(status in ('450','500','600','950'),driverId,null))) as exception_driver,
+//                  |   sum(if(status = '900',eventPrice,0)) as event_price,
+//                  |   current_timestamp as created_at,
+//                  |   current_timestamp as updated_at
+//                  |   from view_event_data where isDel = '0' group by adcId,timestamp
+//                """.stripMargin
+//            val countDriverDataFrame = spark.sql(sql)
+
+            val countDriverDataFrame = eventDataFrame.groupBy($"timestamp".as("run_time"),$"adcId".as("adc_id")).agg(
+                countDistinct(when($"status" === "400",$"driverId").otherwise(null)).cast(IntegerType).as("sign_driver"),
+                countDistinct(when($"status" === "800",$"driverId").otherwise(null)).cast(IntegerType).as("run_driver"),
+                countDistinct(when($"status".isin("450","500","600","950"),$"driverId").otherwise(null)).cast(IntegerType).as("exception_driver"),
+                countDistinct(when($"status" === "900",$"driverId").otherwise(null)).cast(IntegerType).as("complete_driver"),
+                sum(when($"status" === "900",$"eventPrice").otherwise(0)).cast(IntegerType).as("event_price"),
+                current_timestamp().as("created_at"),
+                current_timestamp().as("updated_at")
+            )
+
 
             // 1 hour
             lines.foreachPartition(partition => {
@@ -148,7 +160,6 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
                     val adcId = eventMessage.adcId
                     val status = eventMessage.status
                     val driverId = eventMessage.driverId
-                    // 2017-04-14_10@sign_driver ,  2017-04-14_10@run_driver , 2017-04-14_10@complete_driver  expire 1 day
                     val key = status match {
                         case "400" => dateTimeHour + "@" + adcId + "@sign_driver"
                         case "800" => dateTimeHour + "@" + adcId + "@run_driver"
@@ -181,14 +192,39 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
 //            properties.put("driver", "com.mysql.jdbc.Driver")
 //            countDriverDataFrame.write.mode(SaveMode.Append).jdbc(url, table, properties)
             val connection = DBUtil.createMySQLConnectionFactory(url, userName, password)
-            val removeSql = s"delete from $table where run_time = ? and adc_id = ?"
+            val updateSQL =
+                s"""
+                  | update $table
+                  |     set
+                  |         sign_driver = sign_driver + ? ,
+                  |         run_driver = run_driver + ? ,
+                  |         complete_driver = complete_driver + ? ,
+                  |         exception_driver = exception_driver + ? ,
+                  |         event_price = event_price + ?
+                  | where run_time = ? and adc_id = ?
+                """.stripMargin
+            val querySQL =
+                s"""
+                  | select run_time,adc_id from $table where run_time = ? and adc_id = ?
+                """.stripMargin
             countDriverDataFrame.collect().foreach(row => {
                 val valueMap = row.getValuesMap(countDriverDataFrame.schema.map(_.name))
-                val runTime = valueMap.getOrElse("run_time","")
-                val adcId = valueMap.getOrElse("adc_id","0").toInt
-                val runTimeStamp = DateTime(runTime, DateTime.DATETIMEMINUTE).getDate
-                DBUtil.runSQL(connection, removeSql, Seq(runTimeStamp,adcId))
-                DBUtil.map2table(connection, valueMap, table)
+                val runTime = valueMap.getOrElse("run_time", "")
+                val adcId = valueMap.getOrElse("adc_id", "0").toInt
+                val signDriver = valueMap.getOrElse("sign_driver", 0)
+                val runDriver = valueMap.getOrElse("run_driver", 0)
+                val completeDriver = valueMap.getOrElse("complete_driver", 0)
+                val exceptionDriver = valueMap.getOrElse("exception_driver", 0)
+                val eventPrice = valueMap.getOrElse("event_price", 0)
+                val count = DBUtil.runQuerySQLCount(connection,querySQL,Seq(runTime,adcId))
+                if(count == 0){
+                    DBUtil.insertTable(connection,valueMap,table)
+                }else{
+                    DBUtil.runSQL(connection,updateSQL,Seq(signDriver,runDriver,completeDriver,
+                        exceptionDriver,eventPrice,runTime,adcId
+                    ))
+                }
+
             })
 
 
@@ -229,7 +265,7 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
 
                 val deleteSQL = "delete from bi_stream_trans_event_one_hour where run_time = ? and adc_id = ?"
                 DBUtil.runSQL(connection, deleteSQL, Seq(DateTime(timeHour, DateTime.DATETIMEHOUR).getDate,adcId))
-                DBUtil.map2table(connection, columnMap, "bi_stream_trans_event_one_hour")
+                DBUtil.insertTable(connection, columnMap, "bi_stream_trans_event_one_hour")
 
                 log.info(s"时间:$timeHour 注册司机:$signDriverCount 在跑司机:$runDriverCount 完成司机:$completeDriverCount  " +
                 s"异常司机:$exceptionDriverCount 基础运力费:$eventPrice")
