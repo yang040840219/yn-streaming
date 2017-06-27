@@ -30,7 +30,7 @@ object MyZKStringSerializer extends ZkSerializer {
 
 class ZooKeeperOffsetsStore(zkHosts: String) extends OffsetsStore {
 
-  private val zkClient = new ZkClient(zkHosts, 10000, 10000,MyZKStringSerializer)
+  private val zkClient = new ZkClient(zkHosts, 10000, 10000,MyZKStringSerializer) // 可以传递进来,或者object提供close
 
   override def readOffsets(topic: String,consumer:String): Option[Map[TopicPartition, Long]] = {
     try{

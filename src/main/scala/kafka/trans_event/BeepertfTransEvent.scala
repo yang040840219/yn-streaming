@@ -283,6 +283,8 @@ object BeepertfTransEvent extends Log with AbstractConfEnv {
             val offsetsStore = new ZooKeeperOffsetsStore(conf.getString("beeper_trans_event.consumer.zookeeper"))
             offsetsStore.saveOffsets(topic, conf.getString("beeper_trans_event.consumer.group_id"), offsetRanges)
 
+            //
+            stream.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
         })
 
         ssc.start()
